@@ -1,6 +1,5 @@
 #include "WebSocket.h"
 
-
 #define BUFLEN 512
 
 WebSocket::WebSocket(std::string url,unsigned int port)
@@ -43,7 +42,17 @@ void WebSocket::ConnectSocket(){
         exit(-1);
     }
 }
+void WebSocket::onmessage(void(*fonction)(std::string)) {
+    onmessageFonction = fonction;
+}
+DWORD WINAPI listener(LPVOID lpParameter)
+{
+    WebSocket *webSocket = (WebSocket*)lpParameter;
+    while(1)
+        webSocket->onmessageFonction(webSocket->getMessage());
 
+    return 0;
+}
 void WebSocket::handshake(){
     std::string requete = "";
     requete += "GET / HTTP/1.1\r\n";
@@ -65,13 +74,17 @@ void WebSocket::handshake(){
 
      std::cout<<requete<<std::endl;
 
-
      sendMessage(requete);
 
-     std::string message = getMessage();
+     std::cout<<getMessage()<<std::endl;
+    //TODO VERIFIER LA Sec-WebSocket-Accept
 
-     std::cout<<message<<std::endl;
+    //on lance le thread qui ecoute.
+    DWORD threadID;
+    CreateThread(NULL, 0, listener, (LPVOID)this, 0, &threadID);
 }
+
+
 void WebSocket::sendMessage(std::string message) {
 
     char * bufferOutput = new char [message.length()+1];
@@ -100,7 +113,7 @@ void WebSocket::sendMessage(std::string message) {
 std::string WebSocket::getMessage() {
     std::string chaine = "";
      struct timeval timeout;
-     timeout.tv_sec = 2000;
+     timeout.tv_sec = 200000;
      timeout.tv_usec = 0;
 
      fd_set readfs;

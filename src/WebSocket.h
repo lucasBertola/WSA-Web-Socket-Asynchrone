@@ -8,12 +8,19 @@ class WebSocket
     public:
         //TODO : URL PARSER
         WebSocket(std::string url,unsigned int port);
-        std::string getMessage();
+
+        void onmessage(void (*f)(std::string));
 
         virtual ~WebSocket();
 
+        //|!| do not use this fonction |!|
+        std::string getMessage();
+
+        void (*onmessageFonction)(std::string);
 
     private:
+
+        std::string unmask(std::string reponce)
 
         unsigned int port;
         std::string url;
