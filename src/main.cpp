@@ -1,9 +1,9 @@
 #include <iostream>
-
-using namespace std;
+#include "WebSocket.h"
 
 int main()
 {
-    cout << "Hello world!" << endl;
+    WebSocket websocket ("192.168.1.12:9000/demo/server.php");
+    std::cout << "Hello world!" << std::endl;
     return 0;
 }
