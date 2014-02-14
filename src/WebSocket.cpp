@@ -1,6 +1,6 @@
 #include "WebSocket.h"
 
-#define BUFLEN 512
+#define BUFLEN 2048
 
 WebSocket::WebSocket(std::string url,unsigned int port)
 {
@@ -45,14 +45,43 @@ void WebSocket::ConnectSocket(){
 void WebSocket::onmessage(void(*fonction)(std::string)) {
     onmessageFonction = fonction;
 }
+
+int WebSocket::lengthData(std::string frame){
+     /**
+        The frames you obtain are in the following format:
+        one byte which contains the type of data
+        one byte which contains the length
+        either two or eight additional bytes if the length did not fit in the second byte
+        four bytes which are the masks (= decoding keys)
+        the actual data
+    **/
+
+    //fire byte of lenth :
+    unsigned int length =(unsigned char) frame.c_str()[1];
+
+    //TODO AMELIORER
+     if (length == 126 ) {// if a special case, change indexFirstMask
+            length = (((unsigned char) frame.c_str()[2]) <<8)+(((unsigned char)frame.c_str()[3]) <<0);
+
+     }else if (length == 127){
+         //TODO
+     }
+
+
+    return length;
+}
+
 DWORD WINAPI listener(LPVOID lpParameter)
 {
+
     WebSocket *webSocket = (WebSocket*)lpParameter;
     while(1)
         webSocket->onmessageFonction(webSocket->getMessage());
 
     return 0;
 }
+
+
 void WebSocket::handshake(){
     std::string requete = "";
     requete += "GET / HTTP/1.1\r\n";
@@ -76,7 +105,7 @@ void WebSocket::handshake(){
 
      sendMessage(requete);
 
-     std::cout<<getMessage()<<std::endl;
+     std::cout<<getUpgrade()<<std::endl;
     //TODO VERIFIER LA Sec-WebSocket-Accept
 
     //on lance le thread qui ecoute.
@@ -109,6 +138,43 @@ void WebSocket::sendMessage(std::string message) {
 }
 
 
+std::string WebSocket::getUpgrade() {
+    std::string chaine = "";
+
+     fd_set readfs;
+     FD_ZERO(&readfs);
+     FD_SET(sock,&readfs);
+     int nb = select(sock+1,&readfs,NULL,NULL,NULL);
+
+     if(nb == 0)
+     {
+        #ifdef _DEBUG
+                    std::cout<<"Connexion fermer car timeout"<<std::endl;
+        #endif
+         return "";
+     }
+     else if(nb == -1)
+     {
+        #ifdef _DEBUG
+                    std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
+        #endif
+         //ConnectSocket();
+         return "";
+     }else
+     {
+        int result = -1;
+        char recvbuf[BUFLEN];
+        int recvbuflen = BUFLEN;
+
+        result = recv(sock,recvbuf,recvbuflen,0);
+
+        for(int i = 0 ; i < result ; i++)
+            chaine += recvbuf[i];
+
+        return chaine;
+    }
+
+}
 
 std::string WebSocket::getMessage() {
     std::string chaine = "";
@@ -119,14 +185,14 @@ std::string WebSocket::getMessage() {
      fd_set readfs;
      FD_ZERO(&readfs);
      FD_SET(sock,&readfs);
-     int nb = select(sock+1,&readfs,NULL,NULL,&timeout);
+     int nb = select(sock+1,&readfs,NULL,NULL,NULL);
 
      if(nb==0)
      {
         #ifdef _DEBUG
                     std::cout<<"Connexion fermer car timeout"<<std::endl;
         #endif
-         return 0;
+         return "";
      }
      else if(nb==-1)
      {
@@ -134,16 +200,24 @@ std::string WebSocket::getMessage() {
                     std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
         #endif
          //ConnectSocket();
-         return 0;
+         return "";
      }else
      {
-         char recvbuf[BUFLEN];
-         int recvbuflen = BUFLEN;
+         int result = -1;
+         while(result != 0) {
+             char recvbuf[BUFLEN];
+             int recvbuflen = BUFLEN;
 
-         int result = recv(sock,recvbuf,recvbuflen,0);
-         for(int i = 0 ; i < result ; i++)
-            chaine += recvbuf[i];
-         return chaine;
+              result = recv(sock,recvbuf,recvbuflen,0);
+              for(int i = 0 ; i < result ; i++)
+                chaine += recvbuf[i];
+
+            // std::cout<<lengthData(chaine)<<std::endl;
+             return chaine;
+
+         }
+
+
      }
 }
 

@@ -20,13 +20,14 @@ class WebSocket
 
     private:
 
-        std::string unmask(std::string reponce)
-
         unsigned int port;
         std::string url;
 
         SOCKET sock;
         SOCKADDR_IN sin;
+
+        int lengthData(std::string reponce);
+        std::string getUpgrade();
 
         void createSocket();
         void ConnectSocket();
