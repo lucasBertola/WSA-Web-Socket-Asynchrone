@@ -11,6 +11,9 @@ class WebSocket
 
         void onmessage(void (*f)(std::string));
 
+        void sendMessage(std::string message);
+        void sendMsg(std::string message);
+
         virtual ~WebSocket();
 
         //|!| do not use this fonction |!|
@@ -32,7 +35,7 @@ class WebSocket
         void createSocket();
         void ConnectSocket();
         void handshake();
-        void sendMessage(std::string message);
+
 
 };
 

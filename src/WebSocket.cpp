@@ -127,7 +127,75 @@ void WebSocket::handshake(){
     CreateThread(NULL, 0, listener, (LPVOID)this, 0, &threadID);
 }
 
+void WebSocket::sendMsg(std::string msg) {
 
+    unsigned int length = msg.size();;
+
+    unsigned int nbOctet = 0;
+
+	if(length <= 125)
+        nbOctet = 1
+                    + 1
+                        + 0
+                            + 4
+                                + length;
+
+	else if(length > 125 && length < 65536)
+        nbOctet = 1
+                    + 1
+                        + 2
+                            + 4
+                                + length;
+
+
+	else if(length >= 65536)
+        nbOctet = 1
+                    + 1
+                        + 8
+                            + 4
+                                + length;
+
+
+    char message [nbOctet];
+
+    message[0] = 0x80 | (0x1 & 0x0f);
+
+    if (length <=125) {
+        message[1] = length;
+        message[2] = 'l';
+        message[3] = 'l';
+        message[4] = 'l';
+        message[5] = 'l';
+
+        for(int i = 0 ; i < msg.size() ; i++)
+            message[6+i] = (msg.c_str()[i] ^ 'l');
+    } else if (length > 125 & length < 65536) {
+        message[1] = 126;
+        message[2] = 0;
+        message[3] = length;
+
+        message[4] = 'l';
+        message[5] = 'l';
+        message[6] = 'l';
+        message[7] = 'l';
+
+        for(int i = 0 ; i < msg.size() ; i++)
+            message[8+i] = (msg.c_str()[i] ^ 'l');
+    }else {
+        message[1] = 127;
+    }
+
+    std::string a;
+    for(int i = 0 ; i < nbOctet ; i++)
+        a+= message[i];
+
+
+    //std::cout<<"on envoit : "<<a<<std::endl;
+    // type of data (TODO :no idea what insert in it...)
+
+
+    sendMessage(a);
+}
 void WebSocket::sendMessage(std::string message) {
 
     char * bufferOutput = new char [message.length()+1];
@@ -198,14 +266,14 @@ std::string WebSocket::getMessage() {
      FD_SET(sock,&readfs);
      int nb = select(sock+1,&readfs,NULL,NULL,NULL);
 
-     if(nb==0)
+     if(nb == 0)
      {
         #ifdef _DEBUG
                     std::cout<<"Connexion fermer car timeout"<<std::endl;
         #endif
          return "";
      }
-     else if(nb==-1)
+     else if(nb == -1)
      {
         #ifdef _DEBUG
                     std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
