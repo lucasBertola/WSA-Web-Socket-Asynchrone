@@ -14,6 +14,7 @@ void My_Fonction_Who_use_messge_server(std::string messageServer) {
 int main()
 {
     WebSocket websocket ("192.168.1.12",9000);
+    //WebSocket websocket ("192.168.1.12",1337);
     websocket.onmessage(My_Fonction_Who_use_messge_server);
 
     int a;

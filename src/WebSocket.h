@@ -26,7 +26,7 @@ class WebSocket
         SOCKET sock;
         SOCKADDR_IN sin;
 
-        int lengthData(std::string reponce);
+        int lengthData(std::string reponce , unsigned int* indexBeginData);
         std::string getUpgrade();
 
         void createSocket();

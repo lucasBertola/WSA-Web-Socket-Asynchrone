@@ -46,7 +46,7 @@ void WebSocket::onmessage(void(*fonction)(std::string)) {
     onmessageFonction = fonction;
 }
 
-int WebSocket::lengthData(std::string frame){
+int WebSocket::lengthData(std::string frame,unsigned int* indexBeginData){
      /**
         The frames you obtain are in the following format:
         one byte which contains the type of data
@@ -55,16 +55,30 @@ int WebSocket::lengthData(std::string frame){
         four bytes which are the masks (= decoding keys)
         the actual data
     **/
-
     //fire byte of lenth :
     unsigned int length =(unsigned char) frame.c_str()[1];
-
+    (*indexBeginData) = 2 ;
     //TODO AMELIORER
      if (length == 126 ) {// if a special case, change indexFirstMask
-            length = (((unsigned char) frame.c_str()[2]) <<8)+(((unsigned char)frame.c_str()[3]) <<0);
+
+        length = (((unsigned char) frame.c_str()[2]) <<8)+(((unsigned char)frame.c_str()[3]) <<0);
+
+        length = 0;
+
+         for(int i = 0 ; i < 2 ; i++) {
+            length += (((unsigned char)frame.c_str()[3-i]) << (8*i)) ;
+         }
+
+         (*indexBeginData) = 4;
 
      }else if (length == 127){
-         //TODO
+         length = 0;
+
+         for(int i = 0 ; i < 8 ; i++) {
+            length += (((unsigned char)frame.c_str()[9-i]) << (8*i)) ;
+         }
+
+         (*indexBeginData) = 10 ;
      }
 
 
@@ -178,9 +192,6 @@ std::string WebSocket::getUpgrade() {
 
 std::string WebSocket::getMessage() {
     std::string chaine = "";
-     struct timeval timeout;
-     timeout.tv_sec = 200000;
-     timeout.tv_usec = 0;
 
      fd_set readfs;
      FD_ZERO(&readfs);
@@ -204,20 +215,28 @@ std::string WebSocket::getMessage() {
      }else
      {
          int result = -1;
-         while(result != 0) {
+         int nbDonnerRecu = 0;
+         unsigned int lengtData = 1;
+         unsigned int indexBeginData = 0;
+
+         while(result != 0 && nbDonnerRecu < (lengtData + indexBeginData)) {
              char recvbuf[BUFLEN];
              int recvbuflen = BUFLEN;
 
-              result = recv(sock,recvbuf,recvbuflen,0);
-              for(int i = 0 ; i < result ; i++)
+             result = recv(sock,recvbuf,recvbuflen,0);
+
+             for(int i = 0 ; i < result ; i++)
                 chaine += recvbuf[i];
 
-            // std::cout<<lengthData(chaine)<<std::endl;
-             return chaine;
+            //If it's the first Iteration
+             if(nbDonnerRecu == 0) {
 
+                lengtData = lengthData(chaine , &indexBeginData);
+                chaine.erase(0,indexBeginData);
+             }
+             nbDonnerRecu = result;
          }
-
-
+         return chaine;
      }
 }
 
