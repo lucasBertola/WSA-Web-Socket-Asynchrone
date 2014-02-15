@@ -2,7 +2,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-#define BUFLEN 1
+#define BUFLEN 512
 
 //Web socket protocole : http://tools.ietf.org/html/rfc6455
 /*

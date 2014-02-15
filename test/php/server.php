@@ -29,11 +29,12 @@ while (true) {
 		$socket_new = socket_accept($socket); //accpet new socket
 		$clients[] = $socket_new; //add socket to client array
 		
-		$header = socket_read($socket_new, 1024); //read data sent by the socket
+		$header = socket_read($socket_new, 4096*200); //read data sent by the socket
 		perform_handshaking($header, $socket_new, $host, $port); //perform websocket handshake
 		
 		socket_getpeername($socket_new, $ip); //get ip address of connected socket
-		$response = mask(json_encode(array('type'=>'system', 'message'=>$ip.' connected'))); //prepare json data
+		$response = mask("Il y a eu une connexion"); 
+
 		send_message($response); //notify all users about new connection
 		
 		//make room for new socket
@@ -45,21 +46,16 @@ while (true) {
 	foreach ($changed as $changed_socket) {	
 		
 		//check for any incomming data
-		while(socket_recv($changed_socket, $buf, 1024, 0) >= 1)
+		while(socket_recv($changed_socket, $buf, 4096*200, 0) >= 1)
 		{
-			$received_text = unmask($buf); //unmask data
-			$tst_msg = json_decode($received_text); //json decode 
-			$user_name = $tst_msg->name; //sender name
-			$user_message = $tst_msg->message; //message text
-			$user_color = $tst_msg->color; //color
-			
+			$received_text = unmask($buf); //unmask data	
 			//prepare data to be sent to client
-			$response_text = mask(json_encode(array('type'=>'usermsg', 'name'=>$user_name, 'message'=>$user_message, 'color'=>$user_color)));
+			$response_text = mask($received_text);
 			send_message($response_text); //send data
 			break 2; //exist this loop
 		}
 		
-		$buf = @socket_read($changed_socket, 1024, PHP_NORMAL_READ);
+		$buf = @socket_read($changed_socket, 4096*200, PHP_NORMAL_READ);
 		if ($buf === false) { // check disconnected client
 			// remove client for $clients array
 			$found_socket = array_search($changed_socket, $clients);
@@ -67,7 +63,7 @@ while (true) {
 			unset($clients[$found_socket]);
 			
 			//notify all users about disconnected connection
-			$response = mask(json_encode(array('type'=>'system', 'message'=>$ip.' disconnected')));
+			$response = mask('a user disconnected');
 			send_message($response);
 		}
 	}
@@ -76,7 +72,8 @@ while (true) {
 socket_close($sock);
 
 function send_message($msg)
-{
+{	
+	
 	global $clients;
 	foreach($clients as $changed_socket)
 	{
@@ -106,6 +103,7 @@ function unmask($text) {
 		$text .= $data[$i] ^ $masks[$i%4];
 	}
 	return $text;
+	
 }
 
 //Encode message for transfer to client.
