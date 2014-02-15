@@ -11,7 +11,7 @@ class WebSocket
 
         void onmessage(void (*f)(std::string));
 
-        void sendMessage(std::string message);
+        void sendMessage(char bufferOutput[] ,  int size);
         void sendMsg(std::string message);
 
         virtual ~WebSocket();

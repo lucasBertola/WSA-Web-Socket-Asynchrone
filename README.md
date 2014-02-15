@@ -2,16 +2,13 @@
 
 WSA is an implementation of an Web Socket client in c++.
 
-
-## Installation
-
-
 Basic Usage
 ===============
 ```c++
 	#include "WebSocket.h"
 
 	void My_Fonction_Who_use_messge_server(std::string messageServer) {
+	
 		/*
 			Do some stuff
 		*/
@@ -20,8 +17,7 @@ Basic Usage
 
 	int main()
 	{
-		WebSocket websocket ("192.168.1.12",9000);
-		//WebSocket websocket ("192.168.1.12",1337);
+		WebSocket websocket ("127.0.0.1",9000);
 		websocket.onmessage(My_Fonction_Who_use_messge_server);
 
 		std::string message;

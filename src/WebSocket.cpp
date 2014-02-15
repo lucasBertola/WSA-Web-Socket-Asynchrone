@@ -1,9 +1,13 @@
 #include "WebSocket.h"
+#include <time.h>
+#include <stdlib.h>
 
 #define BUFLEN 2048
 
 WebSocket::WebSocket(std::string url,unsigned int port)
 {
+    srand (time(NULL));
+
     this->port = port;
     this->url = url;
 
@@ -117,7 +121,11 @@ void WebSocket::handshake(){
 
      std::cout<<requete<<std::endl;
 
-     sendMessage(requete);
+     char * bufferOutput = new char [requete.length()+1];
+
+     sendMessage(bufferOutput,requete.size());
+
+     delete[] bufferOutput;
 
      std::cout<<getUpgrade()<<std::endl;
     //TODO VERIFIER LA Sec-WebSocket-Accept
@@ -129,7 +137,7 @@ void WebSocket::handshake(){
 
 void WebSocket::sendMsg(std::string msg) {
 
-    unsigned int length = msg.size();;
+    unsigned int length = msg.size();
 
     unsigned int nbOctet = 0;
 
@@ -162,22 +170,22 @@ void WebSocket::sendMsg(std::string msg) {
 
     if (length <=125) {
         message[1] = length;
-        message[2] = 'l';
-        message[3] = 'l';
-        message[4] = 'l';
-        message[5] = 'l';
+        message[2] = rand() % 256 ;
+        message[3] = rand() % 256 ;
+        message[4] = rand() % 256 ;
+        message[5] = rand() % 256 ;
 
         for(int i = 0 ; i < msg.size() ; i++)
-            message[6+i] = (msg.c_str()[i] ^ 'l');
+            message[6+i] = (msg.c_str()[i] ^ message[i%4+2]);
     } else if (length > 125 & length < 65536) {
         message[1] = 126;
         message[2] = 0;
         message[3] = length;
 
-        message[4] = 'l';
-        message[5] = 'l';
-        message[6] = 'l';
-        message[7] = 'l';
+        message[4] = rand() % 256 ;
+        message[5] = rand() % 256 ;
+        message[6] = rand() % 256 ;
+        message[7] = rand() % 256 ;
 
         for(int i = 0 ; i < msg.size() ; i++)
             message[8+i] = (msg.c_str()[i] ^ 'l');
@@ -185,28 +193,20 @@ void WebSocket::sendMsg(std::string msg) {
         message[1] = 127;
     }
 
-    std::string a;
-    for(int i = 0 ; i < nbOctet ; i++)
-        a+= message[i];
-
-
     //std::cout<<"on envoit : "<<a<<std::endl;
     // type of data (TODO :no idea what insert in it...)
 
 
-    sendMessage(a);
+    sendMessage(message , nbOctet);
 }
-void WebSocket::sendMessage(std::string message) {
-
-    char * bufferOutput = new char [message.length()+1];
-    strcpy (bufferOutput, message.c_str());
+void WebSocket::sendMessage(char bufferOutput[] ,  int size) {
 
     unsigned int nbEnvoyer = 0;
     int erreur = -1;
 
-    while( nbEnvoyer < strlen(bufferOutput) )
+    while( nbEnvoyer < size )
     {
-        erreur = send(sock,bufferOutput+nbEnvoyer,strlen(bufferOutput)-nbEnvoyer,0);
+        erreur = send(sock,bufferOutput+nbEnvoyer,size-nbEnvoyer,0);
         nbEnvoyer+=erreur;
         if(erreur==0||erreur==-1)
         {
@@ -214,9 +214,6 @@ void WebSocket::sendMessage(std::string message) {
             exit(-1);
         }
     }
-
-    delete[] bufferOutput;
-
 }
 
 
