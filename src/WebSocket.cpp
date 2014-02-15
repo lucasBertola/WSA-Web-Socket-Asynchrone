@@ -4,13 +4,40 @@
 
 #define BUFLEN 2048
 
+//Web socket protocole : http://tools.ietf.org/html/rfc6455
+/*
+Base Framing Protocol
+
+0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-------+-+-------------+-------------------------------+
+     |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+     |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+     |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+     | |1|2|3|       |K|             |                               |
+     +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+     |     Extended payload length continued, if payload len == 127  |
+     + - - - - - - - - - - - - - - - +-------------------------------+
+     |                               |Masking-key, if MASK set to 1  |
+     +-------------------------------+-------------------------------+
+     | Masking-key (continued)       |          Payload Data         |
+     +-------------------------------- - - - - - - - - - - - - - - - +
+     :                     Payload Data continued ...                :
+     + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+     |                     Payload Data continued ...                |
+     +---------------------------------------------------------------+
+*/
+
+
 WebSocket::WebSocket(std::string url,unsigned int port)
 {
+    //init random
     srand (time(NULL));
 
     this->port = port;
     this->url = url;
 
+    //init socket on Windows
     WSADATA WSAData;
     if(WSAStartup(MAKEWORD(2,2),&WSAData))
     {
@@ -19,11 +46,14 @@ WebSocket::WebSocket(std::string url,unsigned int port)
     }
 
     createSocket();
+
     ConnectSocket();
+
     handshake();
 }
 
 void WebSocket::createSocket(){
+
     struct hostent *hostinfo = NULL;
     const char *hostname = this->url.c_str();
     hostinfo = gethostbyname(hostname); /* on récupère les informations de l'hôte auquel on veut se connecter */
@@ -37,6 +67,7 @@ void WebSocket::createSocket(){
     sin.sin_addr = *(IN_ADDR *) hostinfo->h_addr;
     sin.sin_family = AF_INET;
     sin.sin_port = htons(this->port);
+
 }
 
 void WebSocket::ConnectSocket(){
@@ -101,6 +132,7 @@ DWORD WINAPI listener(LPVOID lpParameter)
 
 
 void WebSocket::handshake(){
+
     std::string requete = "";
     requete += "GET / HTTP/1.1\r\n";
     requete += "Host:"+url+"\r\n";
@@ -119,87 +151,94 @@ void WebSocket::handshake(){
 
     requete += "\r\n";
 
-     std::cout<<requete<<std::endl;
-
      char * bufferOutput = new char [requete.length()+1];
 
      sendMessage(bufferOutput,requete.size());
 
      delete[] bufferOutput;
 
-     std::cout<<getUpgrade()<<std::endl;
+     getUpgrade();
     //TODO VERIFIER LA Sec-WebSocket-Accept
 
-    //on lance le thread qui ecoute.
+    //launch listener thread.
     DWORD threadID;
     CreateThread(NULL, 0, listener, (LPVOID)this, 0, &threadID);
 }
 
 void WebSocket::sendMsg(std::string msg) {
 
+    /**
+        one byte which contains the type of data
+        one byte which contains the length
+        either two or eight additional bytes if the length did not fit in the second byte
+        four bytes which are the masks (= decoding keys)
+        the actual data
+    **/
+
+    /**
+        Octet i of the transformed data ("transformed-octet-i") is the XOR of
+        octet i of the original data ("original-octet-i") with octet at index
+        i modulo 4 of the masking key ("masking-key-octet-j"):
+
+         j                   = i MOD 4
+         transformed-octet-i = original-octet-i XOR masking-key-octet-j
+     */
+
     unsigned int length = msg.size();
 
     unsigned int nbOctet = 0;
+    unsigned int maskIndex = 0;
+    char *message = NULL ;
 
-	if(length <= 125)
-        nbOctet = 1
-                    + 1
-                        + 0
-                            + 4
-                                + length;
+	if(length <= 125) {
+        nbOctet = 6+ length;
+        message = new char[nbOctet];
 
-	else if(length > 125 && length < 65536)
-        nbOctet = 1
-                    + 1
-                        + 2
-                            + 4
-                                + length;
+        //one byte which contains the length
+        message[1] = length ;
 
+	}else if(length > 125 && length < 65536) {
+        nbOctet = 8+length;
 
-	else if(length >= 65536)
-        nbOctet = 1
-                    + 1
-                        + 8
-                            + 4
-                                + length;
+        message = new char[nbOctet];
 
+        //one byte which contains the length
+        message[1] = 126 ;
 
-    char message [nbOctet];
-
-    message[0] = 0x80 | (0x1 & 0x0f);
-
-    if (length <=125) {
-        message[1] = length;
-        message[2] = rand() % 256 ;
-        message[3] = rand() % 256 ;
-        message[4] = rand() % 256 ;
-        message[5] = rand() % 256 ;
-
-        for(int i = 0 ; i < msg.size() ; i++)
-            message[6+i] = (msg.c_str()[i] ^ message[i%4+2]);
-    } else if (length > 125 & length < 65536) {
-        message[1] = 126;
+        // two additional bytes due to the length did not fit in the second byte
         message[2] = 0;
         message[3] = length;
 
-        message[4] = rand() % 256 ;
-        message[5] = rand() % 256 ;
-        message[6] = rand() % 256 ;
-        message[7] = rand() % 256 ;
+	}else if(length >= 65536){
+        nbOctet = 14 + length;
 
-        for(int i = 0 ; i < msg.size() ; i++)
-            message[8+i] = (msg.c_str()[i] ^ 'l');
-    }else {
-        message[1] = 127;
-    }
+        message = new char[nbOctet];
 
-    //std::cout<<"on envoit : "<<a<<std::endl;
-    // type of data (TODO :no idea what insert in it...)
+        //one byte which contains the length
+        message[1] = 127 ;
 
+         // eight additional bytes due to the length did not fit in the second byte
+	}
+
+	maskIndex = nbOctet - length - 4;
+
+    //one byte which contains the type of data
+    message[0] = 0x80 | (0x1 & 0x0f);
+
+    //four bytes which are the masks (= decoding keys)
+    for(unsigned int i = maskIndex ; i < maskIndex+4 ; i++)
+        message[i] = rand() % 256 ;
+
+    //the actual data
+    for(unsigned int i = 0 ; i < msg.size() ; i++)
+            message[maskIndex+4+i] = (msg.c_str()[i] ^ message[i%4+maskIndex]);
 
     sendMessage(message , nbOctet);
+
+    delete[] message;
+
 }
-void WebSocket::sendMessage(char bufferOutput[] ,  int size) {
+void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
 
     unsigned int nbEnvoyer = 0;
     int erreur = -1;
@@ -207,7 +246,7 @@ void WebSocket::sendMessage(char bufferOutput[] ,  int size) {
     while( nbEnvoyer < size )
     {
         erreur = send(sock,bufferOutput+nbEnvoyer,size-nbEnvoyer,0);
-        nbEnvoyer+=erreur;
+        nbEnvoyer += erreur;
         if(erreur==0||erreur==-1)
         {
             std::cout<<"Erreur dans l'envois de la requette...La connexion a t elle pas été fermé?. "<<erreur<<std::endl;//TODO GERER UNE RECONNEXION
@@ -220,27 +259,19 @@ void WebSocket::sendMessage(char bufferOutput[] ,  int size) {
 std::string WebSocket::getUpgrade() {
     std::string chaine = "";
 
-     fd_set readfs;
-     FD_ZERO(&readfs);
-     FD_SET(sock,&readfs);
-     int nb = select(sock+1,&readfs,NULL,NULL,NULL);
+    fd_set readfs;
+    FD_ZERO(&readfs);
+    FD_SET(sock,&readfs);
+    int nb = select(sock+1,&readfs,NULL,NULL,NULL);
 
-     if(nb == 0)
-     {
+    if(nb == -1)
+        {
         #ifdef _DEBUG
-                    std::cout<<"Connexion fermer car timeout"<<std::endl;
+                std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
         #endif
-         return "";
-     }
-     else if(nb == -1)
-     {
-        #ifdef _DEBUG
-                    std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
-        #endif
-         //ConnectSocket();
-         return "";
-     }else
-     {
+            //ConnectSocket();
+        return "";
+    }else {
         int result = -1;
         char recvbuf[BUFLEN];
         int recvbuflen = BUFLEN;
@@ -250,6 +281,7 @@ std::string WebSocket::getUpgrade() {
         for(int i = 0 ; i < result ; i++)
             chaine += recvbuf[i];
 
+        //TODO check the "\r\n\r\n"
         return chaine;
     }
 
@@ -263,14 +295,7 @@ std::string WebSocket::getMessage() {
      FD_SET(sock,&readfs);
      int nb = select(sock+1,&readfs,NULL,NULL,NULL);
 
-     if(nb == 0)
-     {
-        #ifdef _DEBUG
-                    std::cout<<"Connexion fermer car timeout"<<std::endl;
-        #endif
-         return "";
-     }
-     else if(nb == -1)
+     if(nb == -1)
      {
         #ifdef _DEBUG
                     std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
@@ -280,7 +305,7 @@ std::string WebSocket::getMessage() {
      }else
      {
          int result = -1;
-         int nbDonnerRecu = 0;
+         unsigned int nbDonnerRecu = 0;
          unsigned int lengtData = 1;
          unsigned int indexBeginData = 0;
 
@@ -293,10 +318,11 @@ std::string WebSocket::getMessage() {
              for(int i = 0 ; i < result ; i++)
                 chaine += recvbuf[i];
 
-            //If it's the first Iteration
+            //If it's the first frame
              if(nbDonnerRecu == 0) {
-
+                //check the length of input data
                 lengtData = lengthData(chaine , &indexBeginData);
+                //and cut before the data
                 chaine.erase(0,indexBeginData);
              }
              nbDonnerRecu = result;
