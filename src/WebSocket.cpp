@@ -84,15 +84,16 @@ void WebSocket::onmessage(void(*fonction)(std::string)) {
 
 int WebSocket::lengthData(std::string frame,unsigned int* indexBeginData){
      /**
-        The frames you obtain are in the following format:
-        one byte which contains the type of data
-        one byte which contains the length
-        either two or eight additional bytes if the length did not fit in the second byte
-        the actual data
+    The length of the "Payload data", in bytes: if 0-125, that is the
+      payload length.  If 126, the following 2 bytes interpreted as a
+      16-bit unsigned integer are the payload length.  If 127, the
+      following 8 bytes interpreted as a 64-bit unsigned integer (the
+      most significant bit MUST be 0) are the payload length.
     **/
 
-    //fire byte of lenth :
-    unsigned int length =(unsigned char) frame.c_str()[1];
+
+    //Todo : Take in order the first byte of masking
+    unsigned int length = ((unsigned char) frame.c_str()[1]) & 127;
     (*indexBeginData) = 2 ;
     //TODO AMELIORER
      if (length == 126 ) {// if a special case, change indexFirstMask
@@ -128,9 +129,6 @@ DWORD WINAPI listener(LPVOID lpParameter)
     while(1)
         webSocket->getMessage();
 
-
-        //webSocket->onmessageFonction(webSocket->getMessage());
-
     return 0;
 }
 
@@ -163,6 +161,7 @@ void WebSocket::handshake(){
 
     sendMessage(bufferOutput,requete.size());
 
+    std::cout<<bufferOutput<<std::endl;
 
     //getUpgrade();
     getMessage(1);
@@ -176,14 +175,93 @@ void WebSocket::handshake(){
 void WebSocket::sendMsg(std::string msg) {
 
     /**
-        one byte which contains the type of data
-        one byte which contains the length
-        either two or eight additional bytes if the length did not fit in the second byte
-        four bytes which are the masks (= decoding keys)
-        the actual data
+        See the Base Framing Protocol ( on the top)
     **/
 
+    unsigned int length = msg.size();
+
+    unsigned int nbOctet = 0;
+    unsigned int maskIndex = 0;
+    char *message = NULL ;
+
     /**
+        The length of the "Payload data", in bytes: if 0-125, that is the
+        payload length.  If 126, the following 2 bytes interpreted as a
+        16-bit unsigned integer are the payload length.  If 127, the
+        following 8 bytes interpreted as a 64-bit unsigned integer (the
+        most significant bit MUST be 0) are the payload length.
+
+    */
+
+	if(length <= 125) {
+        nbOctet = 1+1+4+ length;
+        message = new char[nbOctet];
+
+        //one byte which contains the length
+        message[1] = length ;
+
+	}else if(length > 125 && length < 65536) {
+        nbOctet = 1+3+4+length;
+
+        message = new char[nbOctet];
+
+        message[1] = 126 ;
+
+        message[2] = 0;
+        message[3] = length;
+
+	}else if(length >= 65536){
+        nbOctet =1+9+4+ length;
+
+        message = new char[nbOctet];
+
+        message[1] = 127 ;
+	}
+
+	/**
+	 Mask:  1 bit
+
+      Defines whether the "Payload data" is masked.  If set to 1, a
+      masking key is present in masking-key, and this is used to unmask
+      the "Payload data" as per Section 5.3.  All frames sent from
+      client to server have this bit set to 1.
+    **/
+    std::cout<<message[1]+1-1<<std::endl;
+     message[1] =  message[1] | 128;
+
+
+    std::cout<<message[1]+1-1<<std::endl;
+	maskIndex = nbOctet - length - 4;
+
+    /**
+        FIN:  1 bit
+            Indicates that this is the final fragment in a message.  The first
+                fragment MAY also be the final fragment.
+
+        RSV1, RSV2, RSV3:  1 bit each
+
+            MUST be 0 unless an extension is negotiated that defines meanings
+            for non-zero values.  If a nonzero value is received and none of
+            the negotiated extensions defines the meaning of such a nonzero
+            value, the receiving endpoint MUST _Fail the WebSocket
+            Connection_.
+
+   Opcode:  4 bits
+
+      Defines the interpretation of the "Payload data".  If an unknown
+      opcode is received, the receiving endpoint MUST _Fail the
+      WebSocket Connection_.  The following values are defined.
+
+      *  %x1 denotes a text frame
+
+   **/
+   //message[0] = 0x80 | (0x1 & 0x0f);
+    message[0] =129;
+
+
+
+    /**
+        Masking :
         Octet i of the transformed data ("transformed-octet-i") is the XOR of
         octet i of the original data ("original-octet-i") with octet at index
         i modulo 4 of the masking key ("masking-key-octet-j"):
@@ -192,50 +270,11 @@ void WebSocket::sendMsg(std::string msg) {
          transformed-octet-i = original-octet-i XOR masking-key-octet-j
      */
 
-    unsigned int length = msg.size();
-
-    unsigned int nbOctet = 0;
-    unsigned int maskIndex = 0;
-    char *message = NULL ;
-
-	if(length <= 125) {
-        nbOctet = 6+ length;
-        message = new char[nbOctet];
-
-        //one byte which contains the length
-        message[1] = length ;
-
-	}else if(length > 125 && length < 65536) {
-        nbOctet = 8+length;
-
-        message = new char[nbOctet];
-
-        //one byte which contains the length
-        message[1] = 126 ;
-
-        // two additional bytes due to the length did not fit in the second byte
-        message[2] = 0;
-        message[3] = length;
-
-	}else if(length >= 65536){
-        nbOctet = 14 + length;
-
-        message = new char[nbOctet];
-
-        //one byte which contains the length
-        message[1] = 127 ;
-
-         // eight additional bytes due to the length did not fit in the second byte
-	}
-
-	maskIndex = nbOctet - length - 4;
-
-    //one byte which contains the type of data
-    message[0] = 0x80 | (0x1 & 0x0f);
-
-    //four bytes which are the masks (= decoding keys)
+    /**
+        The masking key is a 32-bit value chosen at random by the client.
+    */
     for(unsigned int i = maskIndex ; i < maskIndex+4 ; i++)
-        message[i] = rand() % 256 ;
+        message[i] = rand() % 255 ;
 
     //the actual data
     for(unsigned int i = 0 ; i < msg.size() ; i++)
@@ -264,40 +303,8 @@ void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
 }
 
 
-std::string WebSocket::getUpgrade() {
-    std::string chaine = "";
-
-    fd_set readfs;
-    FD_ZERO(&readfs);
-    FD_SET(sock,&readfs);
-    int nb = select(sock+1,&readfs,NULL,NULL,NULL);
-
-    if(nb == -1)
-        {
-        #ifdef _DEBUG
-                std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
-        #endif
-            //ConnectSocket();
-        return "";
-    }else {
-        int result = -1;
-        char recvbuf[BUFLEN];
-        int recvbuflen = BUFLEN;
-
-        result = recv(sock,recvbuf,recvbuflen,0);
-
-        for(int i = 0 ; i < result ; i++)
-            chaine += recvbuf[i];
-
-        //TODO check the "\r\n\r\n"
-        std::cout<<chaine<<std::endl;
-
-        std::cout<<"fin"<<std::endl;
-        return chaine;
-    }
-
-}
-bool WebSocket::checkUpgrade(std::string) {
+bool WebSocket::checkUpgrade(std::string reponce) {
+    std::cout<<reponce<<std::endl;
     //TODO
     return true;
 }
@@ -389,7 +396,6 @@ bool WebSocket::transformeRequetteMsg(int &result,std::string & chaine,char recv
 
     //If it's the first frame
      if(nbDonnerRecu == 0) {
-
         //check the length of input data
         lengtData = lengthData(chaine , &indexBeginData);
         //and cut before the data
