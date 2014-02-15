@@ -17,12 +17,17 @@ class WebSocket
         virtual ~WebSocket();
 
         //|!| do not use this fonction |!|
-        std::string getMessage();
+       void getMessage(int type = 0);
 
-        void (*onmessageFonction)(std::string);
+
 
     private:
 
+        bool transformeRequetteMsg(int &result , std::string & chaine , char *a ,unsigned int &nbDonnerRecu , unsigned int& lengtData,unsigned int &indexBeginData);
+
+        void (*onmessageFonction)(std::string);
+
+        bool checkUpgrade(std::string);
         unsigned int port;
         std::string url;
 

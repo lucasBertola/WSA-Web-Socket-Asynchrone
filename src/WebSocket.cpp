@@ -2,7 +2,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-#define BUFLEN 2048
+#define BUFLEN 1
 
 //Web socket protocole : http://tools.ietf.org/html/rfc6455
 /*
@@ -44,12 +44,6 @@ WebSocket::WebSocket(std::string url,unsigned int port)
         std::cout<<"Erreur dans le WSAStatrup"<<std::endl;
         exit(-1);
     }
-
-    createSocket();
-
-    ConnectSocket();
-
-    handshake();
 }
 
 void WebSocket::createSocket(){
@@ -78,7 +72,14 @@ void WebSocket::ConnectSocket(){
     }
 }
 void WebSocket::onmessage(void(*fonction)(std::string)) {
+
     onmessageFonction = fonction;
+
+    createSocket();
+
+    ConnectSocket();
+
+    handshake();
 }
 
 int WebSocket::lengthData(std::string frame,unsigned int* indexBeginData){
@@ -87,9 +88,9 @@ int WebSocket::lengthData(std::string frame,unsigned int* indexBeginData){
         one byte which contains the type of data
         one byte which contains the length
         either two or eight additional bytes if the length did not fit in the second byte
-        four bytes which are the masks (= decoding keys)
         the actual data
     **/
+
     //fire byte of lenth :
     unsigned int length =(unsigned char) frame.c_str()[1];
     (*indexBeginData) = 2 ;
@@ -125,7 +126,10 @@ DWORD WINAPI listener(LPVOID lpParameter)
 
     WebSocket *webSocket = (WebSocket*)lpParameter;
     while(1)
-        webSocket->onmessageFonction(webSocket->getMessage());
+        webSocket->getMessage();
+
+
+        //webSocket->onmessageFonction(webSocket->getMessage());
 
     return 0;
 }
@@ -151,13 +155,17 @@ void WebSocket::handshake(){
 
     requete += "\r\n";
 
-     char * bufferOutput = new char [requete.length()+1];
+    const char * tampon = requete.c_str();
 
-     sendMessage(bufferOutput,requete.size());
+    char bufferOutput[requete.size()];
 
-     delete[] bufferOutput;
+    for(int i = 0 ; i < requete.size() ; i++) bufferOutput[i] = tampon[i];
 
-     getUpgrade();
+    sendMessage(bufferOutput,requete.size());
+
+
+    //getUpgrade();
+    getMessage(1);
     //TODO VERIFIER LA Sec-WebSocket-Accept
 
     //launch listener thread.
@@ -282,53 +290,144 @@ std::string WebSocket::getUpgrade() {
             chaine += recvbuf[i];
 
         //TODO check the "\r\n\r\n"
+        std::cout<<chaine<<std::endl;
+
+        std::cout<<"fin"<<std::endl;
         return chaine;
     }
 
 }
+bool WebSocket::checkUpgrade(std::string) {
+    //TODO
+    return true;
+}
+void WebSocket::getMessage(int type) {
 
-std::string WebSocket::getMessage() {
     std::string chaine = "";
+    fd_set readfs;
+    FD_ZERO(&readfs);
+    FD_SET(sock,&readfs);
+    int nb = select(sock+1,&readfs,NULL,NULL,NULL);
 
-     fd_set readfs;
-     FD_ZERO(&readfs);
-     FD_SET(sock,&readfs);
-     int nb = select(sock+1,&readfs,NULL,NULL,NULL);
-
-     if(nb == -1)
-     {
+    if(nb == -1)
+    {
         #ifdef _DEBUG
                     std::cout<<"Connexion fermer car fermeture connexion"<<std::endl;
         #endif
          //ConnectSocket();
-         return "";
-     }else
-     {
-         int result = -1;
-         unsigned int nbDonnerRecu = 0;
-         unsigned int lengtData = 1;
-         unsigned int indexBeginData = 0;
+         return ;
+    }else
+    {
+        int result = -1;
 
-         while(result != 0 && nbDonnerRecu < (lengtData + indexBeginData)) {
-             char recvbuf[BUFLEN];
-             int recvbuflen = BUFLEN;
+        unsigned int nbDonnerRecu = 0;
+        unsigned int lengtData = 1;
+        unsigned int indexBeginData = 0;
 
-             result = recv(sock,recvbuf,recvbuflen,0);
+        while(1){
+            char recvbuf[BUFLEN];
+            unsigned int recvbuflen = BUFLEN;
 
-             for(int i = 0 ; i < result ; i++)
-                chaine += recvbuf[i];
+            result = recv(sock,recvbuf,recvbuflen,0);
 
-            //If it's the first frame
-             if(nbDonnerRecu == 0) {
-                //check the length of input data
-                lengtData = lengthData(chaine , &indexBeginData);
-                //and cut before the data
-                chaine.erase(0,indexBeginData);
-             }
-             nbDonnerRecu = result;
-         }
-         return chaine;
+            //get null message
+            if (result == 0) return;
+
+            //Si we want the upgrade
+            if(type == 1) {
+                for(int i = 0 ; i < result ; i++)
+                    chaine += recvbuf[i];
+
+                size_t positionStop = chaine.find("\r\n\r\n");
+                if(positionStop != std::string::npos) {
+                    //if we are get only the upgrade
+                    if( (positionStop + 4) == chaine.size()) {
+                        checkUpgrade(chaine);
+                        return;
+
+                    }else {
+                        std::string stringTampon = chaine;
+                        stringTampon.replace(positionStop,stringTampon.size(),"");
+                        checkUpgrade(stringTampon);
+
+                        //change the type for that requet get catch by the if ( if type == 0)
+                        //and the nb of octet get.(result)
+
+                        type = 0;
+                        result = chaine.size() - positionStop -4 ;
+
+                        chaine.replace(0,positionStop+4,"");
+
+                        const char *  tampon = chaine.c_str();
+
+                        for(int i = 0 ; i < result ; i++)
+                            recvbuf[i] = tampon[i];
+
+                        chaine = "";
+                    }
+
+                }
+
+            }
+
+
+            //Si we want the message
+            if(type == 0) {
+                if (transformeRequetteMsg(result,chaine, recvbuf,nbDonnerRecu,lengtData,indexBeginData)) return;
+            }
+
+
+        }
+
+        return ;
+    }
+}
+bool WebSocket::transformeRequetteMsg(int &result,std::string & chaine,char recvbuf[],unsigned int &nbDonnerRecu ,unsigned int &lengtData,unsigned int &indexBeginData){
+
+    for(int i = 0 ; i < result ; i++)
+        chaine += recvbuf[i];
+
+    //If it's the first frame
+     if(nbDonnerRecu == 0) {
+
+        //check the length of input data
+        lengtData = lengthData(chaine , &indexBeginData);
+        //and cut before the data
+        chaine.erase(0,indexBeginData);
      }
+     nbDonnerRecu += result;
+    while((nbDonnerRecu >= (lengtData + indexBeginData))) {
+
+         if(nbDonnerRecu == (lengtData + indexBeginData)) {
+            //TODO ouvrir un thread expres pour lui
+            onmessageFonction(chaine);
+            return true;
+
+         }else if (nbDonnerRecu > (lengtData + indexBeginData)){
+            std::string stringTampon = chaine;
+            stringTampon.replace(lengtData ,stringTampon.size(),"");
+            onmessageFonction(stringTampon);
+
+            //and the nb of octet get.(result)
+            result = chaine.size() - stringTampon.size() ;
+
+            chaine.replace(0,stringTampon.size(),"");
+
+            const char *  tampon = chaine.c_str();
+
+            for(int i = 0 ; i < result ; i++)
+                recvbuf[i] = tampon[i];
+
+
+            chaine = "";
+            nbDonnerRecu = 0;
+            lengtData = 1;
+            indexBeginData = 0;
+
+            return transformeRequetteMsg(result,chaine, recvbuf,nbDonnerRecu,lengtData,indexBeginData);
+         }
+    }
+    return false;
 }
 
 WebSocket::~WebSocket()
