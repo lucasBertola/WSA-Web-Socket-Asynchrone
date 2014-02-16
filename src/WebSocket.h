@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <winsock2.h>
+
 class WebSocket
 {
     public:
@@ -23,6 +24,7 @@ class WebSocket
 
     private:
 
+        void sendPong();
         bool transformeRequetteMsg(int &result , std::string & chaine , char *a ,unsigned int &nbDonnerRecu , unsigned int& lengtData,unsigned int &indexBeginData);
 
         void (*onmessageFonction)(std::string);
@@ -30,6 +32,7 @@ class WebSocket
         bool checkUpgrade(std::string);
         unsigned int port;
         std::string url;
+
 
         SOCKET sock;
         SOCKADDR_IN sin;

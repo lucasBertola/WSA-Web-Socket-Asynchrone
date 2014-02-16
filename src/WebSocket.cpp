@@ -95,7 +95,7 @@ int WebSocket::lengthData(std::string frame,unsigned int* indexBeginData){
     //Todo : Take in order the first byte of masking
     unsigned int length = ((unsigned char) frame.c_str()[1]) & 127;
     (*indexBeginData) = 2 ;
-    //TODO AMELIORER
+
      if (length == 126 ) {// if a special case, change indexFirstMask
 
         length = (((unsigned char) frame.c_str()[2]) <<8)+(((unsigned char)frame.c_str()[3]) <<0);
@@ -152,7 +152,6 @@ void WebSocket::handshake(){
     requete += "Upgrade: websocket\r\n";
 
     requete += "\r\n";
-
     const char * tampon = requete.c_str();
 
     char bufferOutput[requete.size()];
@@ -161,7 +160,7 @@ void WebSocket::handshake(){
 
     sendMessage(bufferOutput,requete.size());
 
-    std::cout<<bufferOutput<<std::endl;
+    //std::cout<<bufferOutput<<std::endl;
 
     //getUpgrade();
     getMessage(1);
@@ -226,12 +225,9 @@ void WebSocket::sendMsg(std::string msg) {
       the "Payload data" as per Section 5.3.  All frames sent from
       client to server have this bit set to 1.
     **/
-    std::cout<<message[1]+1-1<<std::endl;
      message[1] =  message[1] | 128;
 
 
-    std::cout<<message[1]+1-1<<std::endl;
-	maskIndex = nbOctet - length - 4;
 
     /**
         FIN:  1 bit
@@ -255,9 +251,19 @@ void WebSocket::sendMsg(std::string msg) {
       *  %x1 denotes a text frame
 
    **/
-   //message[0] = 0x80 | (0x1 & 0x0f);
     message[0] =129;
 
+
+
+
+    /**
+        The masking key is a 32-bit value chosen at random by the client.
+    */
+
+    maskIndex = nbOctet - length - 4;
+
+    for(unsigned int i = maskIndex ; i < maskIndex+4 ; i++)
+        message[i] = rand() % 255 ;
 
 
     /**
@@ -269,12 +275,6 @@ void WebSocket::sendMsg(std::string msg) {
          j                   = i MOD 4
          transformed-octet-i = original-octet-i XOR masking-key-octet-j
      */
-
-    /**
-        The masking key is a 32-bit value chosen at random by the client.
-    */
-    for(unsigned int i = maskIndex ; i < maskIndex+4 ; i++)
-        message[i] = rand() % 255 ;
 
     //the actual data
     for(unsigned int i = 0 ; i < msg.size() ; i++)
@@ -304,7 +304,7 @@ void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
 
 
 bool WebSocket::checkUpgrade(std::string reponce) {
-    std::cout<<reponce<<std::endl;
+    //std::cout<<reponce<<std::endl;
     //TODO
     return true;
 }
@@ -377,10 +377,45 @@ void WebSocket::getMessage(int type) {
 
             }
 
-
-            //Si we want the message
+            //for know if it's message or ping
             if(type == 0) {
+                /*
+                %x0 denotes a continuation frame
+
+              *  %x1 denotes a text frame
+
+              *  %x2 denotes a binary frame
+
+              *  %x3-7 are reserved for further non-control frames
+
+              *  %x8 denotes a connection close
+
+              *  %x9 denotes a ping
+
+              *  %xA denotes a pong
+
+              *  %xB-F are reserved for further control frames
+
+              */
+
+                unsigned int opcode = ((unsigned int) (unsigned char )recvbuf[0] ) & 0xF;
+
+                //text frame
+                if(opcode == 0x1)
+                    type = 2;
+                //ping
+                else if (opcode == 0x9) {
+                    type = 3;
+                }
+            }
+            //Si we want the message
+            if(type == 2) {
                 if (transformeRequetteMsg(result,chaine, recvbuf,nbDonnerRecu,lengtData,indexBeginData)) return;
+            }
+
+            if(type == 3) {
+                sendPong();
+                return;
             }
 
 
@@ -388,6 +423,12 @@ void WebSocket::getMessage(int type) {
 
         return ;
     }
+}
+void WebSocket::sendPong() {
+    char pong[2];
+    pong[0] = 0x8A;
+    pong[1] = 0x0;
+    sendMessage(pong,2);
 }
 bool WebSocket::transformeRequetteMsg(int &result,std::string & chaine,char recvbuf[],unsigned int &nbDonnerRecu ,unsigned int &lengtData,unsigned int &indexBeginData){
 
