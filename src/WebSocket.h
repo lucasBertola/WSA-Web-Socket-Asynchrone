@@ -24,6 +24,10 @@ class WebSocket
 
     private:
 
+        //mutex
+        HANDLE ghMutex;
+
+
         void sendPong();
         bool transformeRequetteMsg(int &result , std::string & chaine , char *a ,unsigned int &nbDonnerRecu , unsigned int& lengtData,unsigned int &indexBeginData);
 

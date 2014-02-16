@@ -44,6 +44,17 @@ WebSocket::WebSocket(std::string url,unsigned int port)
         std::cout<<"Erreur dans le WSAStatrup"<<std::endl;
         exit(-1);
     }
+
+    ghMutex = CreateMutex(
+        NULL,              // default security attributes
+        FALSE,             // initially not owned
+        NULL);             // unnamed mutex
+
+    if (ghMutex == NULL)
+    {
+        std::cout<<"Erreur dans la creation du mutex"<<std::endl;
+        exit(-1);
+    }
 }
 
 void WebSocket::createSocket(){
@@ -72,13 +83,10 @@ void WebSocket::ConnectSocket(){
     }
 }
 void WebSocket::onmessage(void(*fonction)(std::string)) {
-
     onmessageFonction = fonction;
 
     createSocket();
-
     ConnectSocket();
-
     handshake();
 }
 
@@ -286,6 +294,11 @@ void WebSocket::sendMsg(std::string msg) {
 
 }
 void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
+    DWORD dwWaitResult;
+    dwWaitResult = WaitForSingleObject(
+            ghMutex,    // handle to mutex
+            INFINITE);  // no time-out interval
+
 
     unsigned int nbEnvoyer = 0;
     int erreur = -1;
@@ -300,6 +313,7 @@ void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
             exit(-1);
         }
     }
+    ReleaseMutex(ghMutex);
 }
 
 
