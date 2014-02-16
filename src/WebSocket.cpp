@@ -140,7 +140,19 @@ DWORD WINAPI listener(LPVOID lpParameter)
     return 0;
 }
 
+struct parametreThread {
+    WebSocket *webSocket;
+    std::string message;
+};
 
+DWORD WINAPI launcherOnMsgFunction(LPVOID lpParameter)
+{
+    parametreThread*  ps = (parametreThread*)lpParameter ;
+     (*ps).webSocket->onmessageFonction((*ps).message);
+
+    delete ps;
+    return 0;
+}
 void WebSocket::handshake(){
 
     std::string requete = "";
@@ -164,19 +176,16 @@ void WebSocket::handshake(){
 
     char bufferOutput[requete.size()];
 
-    for(int i = 0 ; i < requete.size() ; i++) bufferOutput[i] = tampon[i];
+    for(unsigned int i = 0 ; i < requete.size() ; i++) bufferOutput[i] = tampon[i];
 
     sendMessage(bufferOutput,requete.size());
 
-    //std::cout<<bufferOutput<<std::endl;
-
-    //getUpgrade();
+    //get upgrade
     getMessage(1);
-    //TODO VERIFIER LA Sec-WebSocket-Accept
 
     //launch listener thread.
     DWORD threadID;
-    CreateThread(NULL, 0, listener, (LPVOID)this, 0, &threadID);
+    threadListener = CreateThread(NULL, 0, listener, (LPVOID)this, 0, &threadID);
 }
 
 void WebSocket::sendMsg(std::string msg) {
@@ -294,11 +303,8 @@ void WebSocket::sendMsg(std::string msg) {
 
 }
 void WebSocket::sendMessage(char bufferOutput[] ,unsigned int size) {
-    DWORD dwWaitResult;
-    dwWaitResult = WaitForSingleObject(
-            ghMutex,    // handle to mutex
-            INFINITE);  // no time-out interval
 
+    WaitForSingleObject(ghMutex , INFINITE);
 
     unsigned int nbEnvoyer = 0;
     int erreur = -1;
@@ -460,14 +466,20 @@ bool WebSocket::transformeRequetteMsg(int &result,std::string & chaine,char recv
     while((nbDonnerRecu >= (lengtData + indexBeginData))) {
 
          if(nbDonnerRecu == (lengtData + indexBeginData)) {
-            //TODO ouvrir un thread expres pour lui
-            onmessageFonction(chaine);
+            parametreThread* ps = new parametreThread;
+            (*ps).message = chaine;
+            (*ps).webSocket = this;
+            DWORD threadID;
+            CreateThread(NULL, 0, launcherOnMsgFunction, (LPVOID)ps, 0, &threadID);
+
+           // onmessageFonction(chaine);
+
             return true;
 
          }else if (nbDonnerRecu > (lengtData + indexBeginData)){
             std::string stringTampon = chaine;
             stringTampon.replace(lengtData ,stringTampon.size(),"");
-            onmessageFonction(stringTampon);
+            //onmessageFonction(stringTampon);
 
             //and the nb of octet get.(result)
             result = chaine.size() - stringTampon.size() ;
@@ -493,6 +505,9 @@ bool WebSocket::transformeRequetteMsg(int &result,std::string & chaine,char recv
 
 WebSocket::~WebSocket()
 {
+    //close thread;
+    CloseHandle(threadListener);
+
     closesocket(sock);
 
     WSACleanup();

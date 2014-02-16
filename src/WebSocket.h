@@ -21,17 +21,23 @@ class WebSocket
        void getMessage(int type = 0);
 
 
+        void (*onmessageFonction)(std::string);
+
+
 
     private:
 
         //mutex
         HANDLE ghMutex;
 
+        //thread;
+        HANDLE threadListener;
+
 
         void sendPong();
         bool transformeRequetteMsg(int &result , std::string & chaine , char *a ,unsigned int &nbDonnerRecu , unsigned int& lengtData,unsigned int &indexBeginData);
 
-        void (*onmessageFonction)(std::string);
+
 
         bool checkUpgrade(std::string);
         unsigned int port;
